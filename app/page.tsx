@@ -22,6 +22,10 @@ interface User {
   role: 'admin' | 'user';
 }
 
+const today = new Date();
+const currentMonthStr = String(today.getMonth()); // 0-11
+const currentYearStr = String(today.getFullYear());
+
 export default function Home() {
   const [transaksiMasuk, setTransaksiMasuk] = useState<TransaksiMasuk[]>([]);
   const [transaksiKeluar, setTransaksiKeluar] = useState<TransaksiKeluar[]>([]);
@@ -36,9 +40,11 @@ export default function Home() {
   const [showFormKeterangan, setShowFormKeterangan] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState<string>('all');
-  const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
+  const [selectedYear, setSelectedYear] = useState<string>(currentYearStr);
   const reportRef = useRef<HTMLDivElement | null>(null);
+  const downloadCounterRef = useRef<number>(1);
+  const lastDownloadDateRef = useRef<string>('');
 
   const formatRupiah = (angka: number): string => {
     return new Intl.NumberFormat('id-ID', {
@@ -175,11 +181,112 @@ export default function Home() {
       console.error('Gagal menyimpan laporan ke database:', error);
     }
   };
-
-  //download via pdf
-  const handleDownloadPdf = () => {
+  
+  const handleDownloadPdf = async () => {
     if (typeof window === 'undefined') return;
-    window.print();
+
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 10;
+      const lineHeight = 6;
+      let y = 15;
+
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+        now.getDate(),
+      ).padStart(2, '0')}`;
+      if (lastDownloadDateRef.current !== dateStr) {
+        lastDownloadDateRef.current = dateStr;
+        downloadCounterRef.current = 1;
+      }
+      const fileName = `laporan-badminton-${dateStr}(${downloadCounterRef.current}).pdf`;
+
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Laporan Badminton 2025', pageWidth / 2, y, {
+        align: 'center',
+      });
+      y += 10;
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+
+      // Keterangan
+      doc.text('Keterangan:', margin, y);
+      y += lineHeight;
+
+      if (keteranganList.length === 0) {
+        doc.text('- (belum ada keterangan)', margin + 4, y);
+        y += lineHeight;
+      } else {
+        keteranganList.forEach((item, index) => {
+          const text = `${index + 1}. ${item}`;
+          doc.text(text, margin + 4, y);
+          y += lineHeight;
+        });
+      }
+
+      y += lineHeight;
+
+      const ringkasan = [
+        `Saldo Awal : ${formatRupiah(parseFloat(saldoAwal) || 0)}`,
+        `Saldo Total: ${formatRupiah(saldo)}`,
+        `Total Masuk: ${formatRupiah(totalMasuk)}`,
+        `Total Keluar: ${formatRupiah(totalKeluar)}`,
+      ];
+
+      ringkasan.forEach((row) => {
+        doc.text(row, margin, y);
+        y += lineHeight;
+      });
+
+      y += lineHeight;
+
+      doc.setFont('helvetica', 'bold');
+      doc.text('Daftar Uang Masuk', margin, y);
+      doc.text('Daftar Uang Keluar', pageWidth / 2 + 5, y);
+      doc.setFont('helvetica', 'normal');
+      y += lineHeight;
+
+      const maxRows = Math.max(
+        filteredTransaksiMasuk.length,
+        filteredTransaksiKeluar.length,
+      );
+
+      for (let i = 0; i < maxRows; i += 1) {
+        const masuk = filteredTransaksiMasuk[i];
+        const keluar = filteredTransaksiKeluar[i];
+
+        if (masuk) {
+          const textMasuk = `${i + 1}. ${masuk.deskripsi} - ${formatRupiah(
+            masuk.nominal,
+          )}`;
+          doc.text(textMasuk, margin, y);
+        }
+
+        if (keluar) {
+          const textKeluar = `${i + 1}. ${keluar.deskripsi} - ${formatRupiah(
+            keluar.nominal,
+          )}`;
+          doc.text(textKeluar, pageWidth / 2 + 5, y);
+        }
+
+        y += lineHeight;
+
+        if (y > 280 && i < maxRows - 1) {
+          doc.addPage();
+          y = 15;
+        }
+      }
+
+      doc.save(fileName);
+      downloadCounterRef.current += 1;
+    } catch (error) {
+      console.error('Gagal generate PDF:', error);
+      alert('Gagal membuat PDF. Silakan coba lagi.');
+    }
   };
 
   const handleTambahMasuk = (e: React.FormEvent) => {
@@ -257,7 +364,6 @@ export default function Home() {
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 className="px-2 py-1 rounded-lg border border-gray-300 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="all">Semua</option>
                 <option value="0">Januari</option>
                 <option value="1">Februari</option>
                 <option value="2">Maret</option>
@@ -281,9 +387,14 @@ export default function Home() {
                 onChange={(e) => setSelectedYear(e.target.value)}
                 className="px-2 py-1 rounded-lg border border-gray-300 bg-white text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
+                <option value={currentYearStr}>{currentYearStr}</option>
+                <option value={String(Number(currentYearStr) + 1)}>
+                  {String(Number(currentYearStr) + 1)}
+                </option>
+                <option value={String(Number(currentYearStr) - 1)}>
+                  {String(Number(currentYearStr) - 1)}
+                </option>
                 <option value="all">Semua</option>
-                <option value="2025">2025</option>
-                <option value="2026">2026</option>
               </select>
             </div>
           </div>
@@ -294,6 +405,12 @@ export default function Home() {
                 <span className="text-xs md:text-sm text-gray-600">
                   Admin: <strong>{user.username}</strong>
                 </span>
+                <a
+                  href="/change-password"
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-xs font-semibold hover:bg-gray-50 transition"
+                >
+                  Ganti Password
+                </a> 
                 <button
                   type="button"
                   onClick={handleLogout}

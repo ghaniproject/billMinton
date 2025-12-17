@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Cari user di database
     const result = await pool.query(
       'SELECT * FROM users WHERE username = $1',
       [username]
@@ -29,7 +28,6 @@ export async function POST(request: NextRequest) {
 
     const user = result.rows[0];
 
-    // Verifikasi password
     const isValidPassword = await bcrypt.compare(password, user.password);
 
     if (!isValidPassword) {
@@ -39,18 +37,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate JWT token
     const token = jwt.sign(
       {
         id: user.id,
         username: user.username,
         role: user.role
       },
-      process.env.JWT_SECRET || 'your-secret-key-change-this-in-production',
+      process.env.JWT_SECRET as string,
       { expiresIn: '7d' }
     );
 
-    // Set cookie dengan token
     const response = NextResponse.json({
       success: true,
       user: {
@@ -64,7 +60,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 hari
+      maxAge: 60 * 60 * 24 * 7, // 7 hari (expired jwt)
     });
 
     return response;

@@ -205,7 +205,7 @@ export default function Home() {
 
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text('Laporan Badminton 2025', pageWidth / 2, y, {
+      doc.text('Laporan Badminton Desember 2025', pageWidth / 2, y, {
         align: 'center',
       });
       y += 10;
